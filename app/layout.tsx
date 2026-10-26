@@ -1,5 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import { DM_Mono, Sora } from 'next/font/google'
 import './globals.css'
 
@@ -39,7 +40,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
+  colorScheme: 'light dark',
   themeColor: '#f7f5f0',
 }
 
@@ -49,10 +50,28 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${sora.variable} ${dmMono.variable}`}>
+    <html
+      lang="en"
+      className={`${sora.variable} ${dmMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
+        <Script id="theme-initialization" strategy="beforeInteractive">
+          {`try {
+  const storedTheme = localStorage.getItem('portfolio-theme')
+  const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  const theme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : systemTheme
+  document.documentElement.dataset.theme = theme
+  document.documentElement.style.colorScheme = theme
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', theme === 'dark' ? '#171816' : '#f7f5f0')
+} catch {
+  document.documentElement.dataset.theme = 'light'
+}`}
+        </Script>
       </body>
     </html>
   )

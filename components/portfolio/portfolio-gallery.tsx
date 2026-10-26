@@ -1,14 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink, Play } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, ImageOff, Play } from 'lucide-react'
 import {
   html5Games,
   projects,
   type DimensionType,
   type Html5Game,
   type Project,
-  type ProjectType,
 } from '@/data/projects'
 
 type PortfolioGalleryProps = {
@@ -16,11 +15,35 @@ type PortfolioGalleryProps = {
   onSelectHtml5Game: (game: Html5Game) => void
 }
 
+function GameArtwork({ src, title }: { src: string; title: string }) {
+  const [hasError, setHasError] = useState(false)
+
+  if (hasError) {
+    return (
+      <span className="image-fallback" role="img" aria-label={`${title} artwork unavailable`}>
+        <ImageOff size={22} aria-hidden="true" />
+        <span>{title}</span>
+      </span>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={title}
+      loading="lazy"
+      onError={() => setHasError(true)}
+    />
+  )
+}
+
 export function PortfolioGallery({
   onSelectProject,
   onSelectHtml5Game,
 }: PortfolioGalleryProps) {
-  const [selectedType, setSelectedType] = useState<ProjectType>('Playable Ads')
+  const [activeSection, setActiveSection] = useState<'playable-ads' | 'html5-games'>(
+    'playable-ads',
+  )
   const [selectedDimension, setSelectedDimension] = useState<'All' | DimensionType>('All')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [isCategoryOpen, setIsCategoryOpen] = useState(false)
@@ -35,6 +58,28 @@ export function PortfolioGallery({
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    const sections = document.querySelectorAll<HTMLElement>('#playable-ads, #html5-games')
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleSection = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0]
+
+        if (
+          visibleSection?.target.id === 'playable-ads' ||
+          visibleSection?.target.id === 'html5-games'
+        ) {
+          setActiveSection(visibleSection.target.id)
+        }
+      },
+      { rootMargin: '-15% 0px -70% 0px', threshold: 0 },
+    )
+
+    sections.forEach((section) => observer.observe(section))
+    return () => observer.disconnect()
   }, [])
 
   const categoriesWithCounts = useMemo(() => {
@@ -61,10 +106,6 @@ export function PortfolioGallery({
     [selectedDimension, selectedCategory],
   )
 
-  function scrollToSection(sectionId: string) {
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' })
-  }
-
   return (
     <>
       <section className="portfolio-section" id="playable-ads">
@@ -75,28 +116,22 @@ export function PortfolioGallery({
 
         <div className="portfolio-filter-bar">
           <div className="type-pills" aria-label="Portfolio sections">
-            <button
-              className={`type-pill ${selectedType === 'Playable Ads' ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedType('Playable Ads')
-                scrollToSection('playable-ads')
-              }}
-              aria-pressed={selectedType === 'Playable Ads'}
+            <a
+              className={`type-pill ${activeSection === 'playable-ads' ? 'active' : ''}`}
+              href="#playable-ads"
+              aria-current={activeSection === 'playable-ads' ? 'location' : undefined}
             >
               <span>Playable Ads</span>
               <ChevronRight size={14} />
-            </button>
-            <button
-              className={`type-pill ${selectedType === 'HTML5 Games' ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedType('HTML5 Games')
-                scrollToSection('html5-games')
-              }}
-              aria-pressed={selectedType === 'HTML5 Games'}
+            </a>
+            <a
+              className={`type-pill ${activeSection === 'html5-games' ? 'active' : ''}`}
+              href="#html5-games"
+              aria-current={activeSection === 'html5-games' ? 'location' : undefined}
             >
               <span>HTML5 Games</span>
               <ChevronRight size={14} />
-            </button>
+            </a>
           </div>
 
           <div className="filter-controls">
@@ -164,30 +199,46 @@ export function PortfolioGallery({
           </div>
         </div>
 
-        <div className="media-grid">
-          {filteredProjects.map((project) => (
-            <button
-              type="button"
-              key={project.id}
-              className="media-card"
-              aria-label={`Play ${project.title}`}
-              onClick={() => onSelectProject(project)}
-            >
-              <div className="card-image-wrap">
-                <img src={project.thumbnail} alt={project.title} loading="lazy" />
-                <div className="card-play-overlay">
-                  <span className="card-play-badge">
-                    <Play size={13} fill="currentColor" /> Play Ad
-                  </span>
+        {filteredProjects.length > 0 ? (
+          <div className="media-grid" aria-live="polite">
+            {filteredProjects.map((project) => (
+              <button
+                type="button"
+                key={project.id}
+                className="media-card"
+                aria-label={`Play ${project.title}`}
+                onClick={() => onSelectProject(project)}
+              >
+                <div className="card-image-wrap">
+                  <GameArtwork src={project.thumbnail} title={project.title} />
+                  <div className="card-play-overlay">
+                    <span className="card-play-badge">
+                      <Play size={13} fill="currentColor" /> Play Ad
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="card-content" style={{ backgroundColor: project.cardBg }}>
-                <div className="card-caption">{project.category}</div>
-                <h3 className="card-title">{project.title}</h3>
-              </div>
+
+                <div className="card-content" style={{ backgroundColor: project.cardBg }}>
+                  <div className="card-caption">{project.category}</div>
+                  <h3 className="card-title">{project.title}</h3>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state" role="status">
+            <p>No games match these filters.</p>
+            <button
+              className="empty-state-reset"
+              onClick={() => {
+                setSelectedDimension('All')
+                setSelectedCategory('All')
+              }}
+            >
+              Clear filters
             </button>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
 
       <section className="html5-section" id="html5-games">
@@ -206,7 +257,7 @@ export function PortfolioGallery({
                 aria-label={`Play ${game.title}`}
                 onClick={() => onSelectHtml5Game(game)}
               >
-                <img src={game.image} alt={game.title} loading="lazy" />
+                <GameArtwork src={game.image} title={game.title} />
                 <div className="html5-overlay">
                   <h3>{game.title}</h3>
                   <span className="btn-see">

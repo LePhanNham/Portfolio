@@ -16,7 +16,16 @@ type GamePreviewDialogProps = {
 export function GamePreviewDialog({ preview, onClose }: GamePreviewDialogProps) {
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
   const [reloadKey, setReloadKey] = useState(0)
+  const [frameState, setFrameState] = useState<{
+    key: string
+    status: 'loading' | 'ready' | 'slow' | 'error'
+  } | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
+
+  const gameKey = preview ? `${preview.type}-${preview.game.id}-${reloadKey}` : null
+  const frameStatus =
+    gameKey && frameState?.key === gameKey ? frameState.status : 'loading'
 
   useEffect(() => {
     if (!preview) return
@@ -29,22 +38,75 @@ export function GamePreviewDialog({ preview, onClose }: GamePreviewDialogProps) 
     if (!preview) return
 
     const previousOverflow = document.body.style.overflow
+    const previouslyFocusedElement = document.activeElement
     document.body.style.overflow = 'hidden'
+    dialogRef.current?.querySelector<HTMLElement>('[data-dialog-close]')?.focus()
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+      const focusableElements = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled), iframe, [tabindex]:not([tabindex="-1"])',
+      )
+      if (!focusableElements?.length) {
+        event.preventDefault()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    function handleFocusIn(event: FocusEvent) {
+      if (
+        dialogRef.current &&
+        !dialogRef.current.contains(event.target as Node)
+      ) {
+        dialogRef.current.querySelector<HTMLElement>('[data-dialog-close]')?.focus()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('focusin', handleFocusIn)
     return () => {
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('focusin', handleFocusIn)
+      if (previouslyFocusedElement instanceof HTMLElement && previouslyFocusedElement.isConnected) {
+        previouslyFocusedElement.focus()
+      }
     }
   }, [preview, onClose])
+
+  useEffect(() => {
+    if (!gameKey) return
+
+    const timeoutId = window.setTimeout(() => {
+      setFrameState((current) =>
+        current?.key !== gameKey || current.status === 'loading'
+          ? { key: gameKey, status: 'slow' }
+          : current,
+      )
+    }, 10000)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [gameKey])
 
   if (!preview) return null
 
   const game = preview.game
+  const iframeKey = `${preview.type}-${game.id}-${reloadKey}`
   const gameUrl =
     preview.type === 'playable-ad' ? preview.game.htmlUrl : preview.game.url
 
@@ -64,7 +126,14 @@ export function GamePreviewDialog({ preview, onClose }: GamePreviewDialogProps) 
         if (event.target === event.currentTarget) onClose()
       }}
     >
-      <div className="dialog-modal" role="dialog" aria-modal="true" aria-label={game.title}>
+      <div
+        className="dialog-modal"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={game.title}
+        tabIndex={-1}
+      >
         <div className="dialog-header">
           <div className="dialog-title-wrap">
             <strong>{game.title}</strong>
@@ -125,6 +194,7 @@ export function GamePreviewDialog({ preview, onClose }: GamePreviewDialogProps) 
             </a>
             <button
               className="dialog-close-btn"
+              data-dialog-close
               onClick={onClose}
               title="Close Dialog"
               aria-label="Close preview"
@@ -140,13 +210,37 @@ export function GamePreviewDialog({ preview, onClose }: GamePreviewDialogProps) 
             ref={previewRef}
           >
             <iframe
-              key={`${game.id}-${reloadKey}`}
+              key={iframeKey}
               src={gameUrl}
               title={`${game.title} game preview`}
               className="dialog-iframe"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; fullscreen"
+              onLoad={() => setFrameState({ key: iframeKey, status: 'ready' })}
+              onError={() => setFrameState({ key: iframeKey, status: 'error' })}
             />
           </div>
+          {frameStatus !== 'ready' && (
+            <div className={`preview-message ${frameStatus}`} role="status" aria-live="polite">
+              {frameStatus === 'loading' && 'Loading game…'}
+              {frameStatus === 'slow' && (
+                <>
+                  <span>Taking a while?</span>
+                  <a href={gameUrl} target="_blank" rel="noreferrer">
+                    Open game
+                  </a>
+                </>
+              )}
+              {frameStatus === 'error' && (
+                <>
+                  <span>Could not load this game.</span>
+                  <button onClick={() => setReloadKey((key) => key + 1)}>Try again</button>
+                  <a href={gameUrl} target="_blank" rel="noreferrer">
+                    Open game
+                  </a>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {preview.type === 'playable-ad' && (

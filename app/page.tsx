@@ -7,6 +7,7 @@ import {
   type GamePreview,
 } from '@/components/portfolio/game-preview-dialog'
 import { PortfolioGallery } from '@/components/portfolio/portfolio-gallery'
+import { ThemeToggle } from '@/components/theme-toggle'
 import type { Html5Game, Project } from '@/data/projects'
 
 export default function Page() {
@@ -54,6 +55,7 @@ export default function Page() {
           Let’s Talk
           <ChevronRight size={16} />
         </a>
+        <ThemeToggle />
       </nav>
 
       <header className="play-hero" id="top">
